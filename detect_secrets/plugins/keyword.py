@@ -156,15 +156,15 @@ FOLLOWED_BY_EQUAL_SIGNS_REGEX = re.compile(
     # or my_password !== "bar"
     # e.g. my_password == 'bar' or my_password != 'bar' or my_password === 'bar'
     # or my_password !== 'bar'
-    r'{denylist}({closing})?{whitespace}(={{1,3}}|!==?){whitespace}({quote}?)(\w+)(\4)'.format(  # noqa: E501
+    r'{denylist}({closing})?{whitespace}(={{1,3}}|!==?){whitespace}({quote}?)({secret})(\4)'.format(  # noqa: E501
         denylist=DENYLIST_REGEX,
         closing=CLOSING,
         quote=QUOTE,
         whitespace=OPTIONAL_WHITESPACE,
+        secret=SECRET,
     ),
     flags=re.IGNORECASE,
 )
-
 FOLLOWED_BY_EQUAL_SIGNS_QUOTES_REQUIRED_REGEX = re.compile(
     # e.g. my_password = "bar"
     # e.g. my_password == "bar" or my_password != "bar" or my_password === "bar"
@@ -239,7 +239,10 @@ QUOTES_REQUIRED_DENYLIST_REGEX_TO_GROUP = {
     FOLLOWED_BY_EQUAL_SIGNS_QUOTES_REQUIRED_REGEX: 5,
     FOLLOWED_BY_QUOTES_AND_SEMICOLON_REGEX: 3,
     FOLLOWED_BY_ARROW_FUNCTION_SIGN_QUOTES_REQUIRED_REGEX: 4,
+    FOLLOWED_BY_EQUAL_SIGNS_REGEX: 5, # added this line
+    FOLLOWED_BY_COLON_REGEX: 4, # added this line
 }
+
 REGEX_BY_FILETYPE = {
     FileType.GO: GOLANG_DENYLIST_REGEX_TO_GROUP,
     FileType.OBJECTIVE_C: COMMON_C_DENYLIST_REGEX_TO_GROUP,
