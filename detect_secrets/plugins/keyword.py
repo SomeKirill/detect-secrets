@@ -41,6 +41,7 @@ from detect_secrets.util.code_snippet import CodeSnippet
 
 # Note: All values here should be lowercase
 DENYLIST = (
+    # Generic keywords
     'api_?key',
     'auth_?key',
     'service_?key',
@@ -57,9 +58,65 @@ DENYLIST = (
     'passwd',
     'pwd',
     'secret',
-    'contraseña',
-    'contrasena',
+    
+    # Web-related sensitive information
+    'api_?token',
+    'auth_?token',
+    'access_?token',
+    'refresh_?token',
+    'jwt_?token',
+    
+    # Encryption-related
+    'encryption_?key',
+    'cipher_?key',
+    'crypt_?key',
+    'rsa_?key',
+    'aes_?key',
+    
+    # Database credentials
+    'mysql_?user',
+    'mysql_?pass',
+    'sql_?user',
+    'sql_?pass',
+    'oracle_?user',
+    'oracle_?pass',
+    'postgres_?user',
+    'postgres_?pass',
+    'mongodb_?user',
+    'mongodb_?pass',
+    'db2_?user',
+    'db2_?pass',
+    
+    # API keys and tokens for specific services
+    'twilio_?sid',
+    'twilio_?token',
+    'sendgrid_?key',
+    'stripe_?key',
+    'github_?token',
+    'google_?api_?key',
+    'google_?client_?id',
+    'google_?client_?secret',
+    'aws_?access_?key',
+    'aws_?secret_?key',
+    
+    # Other common sensitive terms
+    'private_?token',
+    'access_?key',
+    'secret_?key',
+    'secret_?token',
+    'client_?secret',
+    'oauth_?token',
+    'bearer_?token',
+    'apikey',
+    'app_?secret',
+    'app_?token',
+    'encryption_?secret',
+    'encryption_?token',
+    'signing_?key',
+    'signing_?secret',
+    'signing_?token',
 )
+
 # Includes ], ', " as closing
 CLOSING = r'[]\'"]{0,2}'
 AFFIX_REGEX = r'\w*'
