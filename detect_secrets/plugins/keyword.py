@@ -1,5 +1,36 @@
+"""
+This code was extracted in part from
+https://github.com/PyCQA/bandit. Using similar heuristic logic,
+we adapted it to fit our plugin infrastructure, to create an organized,
+concerted effort in detecting all type of secrets in code.
+
+Copyright (c) 2014 Hewlett-Packard Development Company, L.P.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
 import re
-from typing import Any, Dict, Generator, Optional, Pattern, Set
+from typing import Any
+from typing import Dict
+from typing import Generator
+from typing import Optional
+from typing import Pattern
+from typing import Set
 
 from ..core.potential_secret import PotentialSecret
 from ..util.filetype import determine_file_type
@@ -7,8 +38,9 @@ from ..util.filetype import FileType
 from .base import BasePlugin
 from detect_secrets.util.code_snippet import CodeSnippet
 
+
+# Note: All values here should be lowercase
 DENYLIST = (
-    # Generic keywords
     'api_?key',
     'auth_?key',
     'service_?key',
@@ -25,176 +57,189 @@ DENYLIST = (
     'passwd',
     'pwd',
     'secret',
-    
-    # Web-related sensitive information
-    'api_?token',
-    'auth_?token',
-    'access_?token',
-    'refresh_?token',
-    'jwt_?token',
-    'session_?id',
-    'csrf_?token',
-    
-    # Encryption-related
-    'encryption_?key',
-    'cipher_?key',
-    'crypt_?key',
-    'rsa_?key',
-    'aes_?key',
-    
-    # Database credentials
-    'mysql_?user',
-    'mysql_?pass',
-    'sql_?user',
-    'sql_?pass',
-    'oracle_?user',
-    'oracle_?pass',
-    'postgres_?user',
-    'postgres_?pass',
-    'mongodb_?user',
-    'mongodb_?pass',
-    'db2_?user',
-    'db2_?pass',
-    
-    # API keys and tokens for specific services
-    'twilio_?sid',
-    'twilio_?token',
-    'sendgrid_?key',
-    'stripe_?key',
-    'github_?token',
-    'google_?api_?key',
-    'google_?client_?id',
-    'google_?client_?secret',
-    'aws_?access_?key',
-    'aws_?secret_?key',
-    
-    # Other common sensitive terms
-    'private_?token',
-    'access_?key',
-    'secret_?key',
-    'secret_?token',
-    'client_?secret',
-    'oauth_?token',
-    'bearer_?token',
-    'apikey',
-    'app_?secret',
-    'app_?token',
-    'encryption_?secret',
-    'encryption_?token',
-    'signing_?key',
-    'signing_?secret',
-    'signing_?token',
-    
-    # Common usernames
-    'admin',
-    'root',
-    'administrator',
-    'user',
-    'username',
-    'login',
-    'userid',
-    
-    # Common email-related terms
-    'email',
-    'e_?mail',
-    'mail',
-    'e_?address',
-    'email_?address',
-    'mail_?address',
-    
-    # Common personal identifiers
-    'name',
-    'first_?name',
-    'last_?name',
-    'fullname',
-    'phone',
-    'phone_?number',
-    'ssn',
-    'social_?security_?number',
-    'sin',  # Social Insurance Number
-    
-    # Financial information
-    'credit_?card',
-    'credit_?card_?number',
-    'ccn',
-    'credit_?card_?cvv',
-    'credit_?card_?expiry',
-    'ccv',  # Credit Card Verification Code
-    'ccv2',
-    'cvc',  # Credit Verification Code
-    'cvc2',
-    'cvv',  # Card Verification Value
-    
-    # Personal identification numbers (PINs)
-    'pin',
-    'personal_?identification_?number',
-    'atm_?pin',
-    'debit_?card_?pin',
-    
-    # Birthdates
-    'dob',
-    'date_?of_?birth',
-    
-    # Addresses
-    'address',
-    'home_?address',
-    'billing_?address',
-    'postal_?address',
-    
-    # Health-related information
-    'health_?card',
-    'health_?insurance_?number',
-    'hin',
-    'medical_?record_?number',
-    'mrn',
-    'patient_?id',
-    
-    # API and service-related terms
-    'endpoint',
-    'url',
-    'uri',
-    'webhook',
-    'callback',
-    'callback_?url',
-    
-    # File and directory paths
-    'path',
-    'file_?path',
-    'dir_?path',
-    'directory_?path',
-    'file_?location',
-    'dir_?location',
-    'directory_?location',
+    'contraseña',
+    'contrasena',
 )
-
-# ... (existing code)
-
+# Includes ], ', " as closing
+CLOSING = r'[]\'"]{0,2}'
+AFFIX_REGEX = r'\w*'
+DENYLIST_REGEX = r'|'.join(DENYLIST)
 # Support for suffix after keyword i.e. password_secure = "value"
 DENYLIST_REGEX = r'({denylist}){suffix}'.format(
     denylist=DENYLIST_REGEX,
     suffix=AFFIX_REGEX,
 )
-
 # Support for prefix and suffix with keyword, needed for reverse comparisons
 # i.e. if ("value" == my_password_secure) {}
 DENYLIST_REGEX_WITH_PREFIX = r'{prefix}{denylist}'.format(
     prefix=AFFIX_REGEX,
     denylist=DENYLIST_REGEX,
 )
-
-# Support for no quotes around the value i.e. password=p@ssw0rd
-DENYLIST_UNQUOTED_REGEX = r'{denylist}(?=\s*[=:])(?!\s*["\'])({secret})'.format(
-    denylist=DENYLIST_REGEX,
-    secret=SECRET,
-)
-
 # Non-greedy match
 OPTIONAL_WHITESPACE = r'\s*'
 OPTIONAL_NON_WHITESPACE = r'[^\s]{0,50}?'
 QUOTE = r'[\'"`]'
+# Secret regex details:
+#   (?=[^\v\'"]*)   ->  this section match with every character except line breaks and quotes. This
+#                       allows to find secrets that starts with symbols or alphanumeric characters.
+#
+#   (?=\w+)     ->  this section match only with words (letters, numbers or _ are allowed), and at
+#                   least one character is required. This allows to reduce the false positives
+#                   number.
+#
+#   [^\v\'"]*   ->  this section match with every character except line breaks and quotes. This
+#                   allows to find secrets with symbols at the end.
+#
+#   [^\v,\'"`]  ->  this section match with the last secret character that can be everything except
+#                   line breaks, comma, backticks or quotes. This allows to reduce the false
+#                   positives number and to prevent errors in the code snippet highlighting.
+SECRET = r'(?=[^\v\'\"]*)(?=\w+)[^\v\'\"]*[^\v,\'\"`]'
+SQUARE_BRACKETS = r'(\[[0-9]*\])'
 
-# ... (existing code)
+FOLLOWED_BY_COLON_EQUAL_SIGNS_REGEX = re.compile(
+    # e.g. my_password := "bar" or my_password := bar
+    r'{denylist}({closing})?{whitespace}:={whitespace}({quote}?)({secret})(\3)'.format(
+        denylist=DENYLIST_REGEX,
+        closing=CLOSING,
+        quote=QUOTE,
+        whitespace=OPTIONAL_WHITESPACE,
+        secret=SECRET,
+    ),
+    flags=re.IGNORECASE,
+)
+FOLLOWED_BY_COLON_REGEX = re.compile(
+    # e.g. api_key: foo
+    r'{denylist}({closing})?:{whitespace}({quote}?)({secret})(\3)'.format(
+        denylist=DENYLIST_REGEX,
+        closing=CLOSING,
+        quote=QUOTE,
+        whitespace=OPTIONAL_WHITESPACE,
+        secret=SECRET,
+    ),
+    flags=re.IGNORECASE,
+)
+FOLLOWED_BY_COLON_QUOTES_REQUIRED_REGEX = re.compile(
+    # e.g. api_key: "foo"
+    r'{denylist}({closing})?:({whitespace})({quote})({secret})(\4)'.format(
+        denylist=DENYLIST_REGEX,
+        closing=CLOSING,
+        quote=QUOTE,
+        whitespace=OPTIONAL_WHITESPACE,
+        secret=SECRET,
+    ),
+    flags=re.IGNORECASE,
+)
+FOLLOWED_BY_EQUAL_SIGNS_OPTIONAL_BRACKETS_OPTIONAL_AT_SIGN_QUOTES_REQUIRED_REGEX = re.compile(
+    # e.g. my_password = "bar"
+    # e.g. my_password = @"bar"
+    # e.g. my_password[] = "bar";
+    # e.g. char my_password[25] = "bar";
+    r'{denylist}({square_brackets})?{optional_whitespace}[!=]{{1,2}}{optional_whitespace}(@)?(")({secret})(\5)'.format(  # noqa: E501
+        denylist=DENYLIST_REGEX,
+        square_brackets=SQUARE_BRACKETS,
+        optional_whitespace=OPTIONAL_WHITESPACE,
+        secret=SECRET,
+    ),
+    flags=re.IGNORECASE,
+)
+FOLLOWED_BY_OPTIONAL_ASSIGN_QUOTES_REQUIRED_REGEX = re.compile(
+    # e.g. std::string secret("bar");
+    # e.g. secret.assign("bar",17);
+    r'{denylist}(.assign)?\((")({secret})(\3)'.format(
+        denylist=DENYLIST_REGEX,
+        secret=SECRET,
+    ),
+)
+FOLLOWED_BY_EQUAL_SIGNS_REGEX = re.compile(
+    # e.g. my_password = bar
+    # e.g. my_password == "bar" or my_password != "bar" or my_password === "bar"
+    # or my_password !== "bar"
+    # e.g. my_password == 'bar' or my_password != 'bar' or my_password === 'bar'
+    # or my_password !== 'bar'
+    r'{denylist}({closing})?{whitespace}(={{1,3}}|!==?){whitespace}({quote}?)(\w+)(\4)'.format(  # noqa: E501
+        denylist=DENYLIST_REGEX,
+        closing=CLOSING,
+        quote=QUOTE,
+        whitespace=OPTIONAL_WHITESPACE,
+    ),
+    flags=re.IGNORECASE,
+)
 
+FOLLOWED_BY_EQUAL_SIGNS_QUOTES_REQUIRED_REGEX = re.compile(
+    # e.g. my_password = "bar"
+    # e.g. my_password == "bar" or my_password != "bar" or my_password === "bar"
+    # or my_password !== "bar"
+    # e.g. my_password == 'bar' or my_password != 'bar' or my_password === 'bar'
+    # or my_password !== 'bar'
+    r'{denylist}({closing})?{whitespace}(={{1,3}}|!==?){whitespace}({quote})({secret})(\4)'.format(  # noqa: E501
+        denylist=DENYLIST_REGEX,
+        closing=CLOSING,
+        quote=QUOTE,
+        whitespace=OPTIONAL_WHITESPACE,
+        secret=SECRET,
+    ),
+    flags=re.IGNORECASE,
+)
+PRECEDED_BY_EQUAL_COMPARISON_SIGNS_QUOTES_REQUIRED_REGEX = re.compile(
+    # e.g. "bar" == my_password or "bar" != my_password or "bar" === my_password
+    # or "bar" !== my_password
+    # e.g. 'bar' == my_password or 'bar' != my_password or 'bar' === my_password
+    # or 'bar' !== my_password
+    r'({quote})({secret})(\1){whitespace}[!=]{{2,3}}{whitespace}{denylist}'.format(
+        denylist=DENYLIST_REGEX_WITH_PREFIX,
+        quote=QUOTE,
+        whitespace=OPTIONAL_WHITESPACE,
+        secret=SECRET,
+    ),
+)
+FOLLOWED_BY_QUOTES_AND_SEMICOLON_REGEX = re.compile(
+    # e.g. private_key "something";
+    r'{denylist}{nonWhitespace}{whitespace}({quote})({secret})(\2);'.format(
+        denylist=DENYLIST_REGEX,
+        nonWhitespace=OPTIONAL_NON_WHITESPACE,
+        quote=QUOTE,
+        whitespace=OPTIONAL_WHITESPACE,
+        secret=SECRET,
+    ),
+    flags=re.IGNORECASE,
+)
+FOLLOWED_BY_ARROW_FUNCTION_SIGN_QUOTES_REQUIRED_REGEX = re.compile(
+    # e.g. my_password => "bar" or my_password => bar
+    r'{denylist}({closing})?{whitespace}=>?{whitespace}({quote})({secret})(\3)'.format(
+        denylist=DENYLIST_REGEX,
+        closing=CLOSING,
+        quote=QUOTE,
+        whitespace=OPTIONAL_WHITESPACE,
+        secret=SECRET,
+    ),
+    flags=re.IGNORECASE,
+)
+CONFIG_DENYLIST_REGEX_TO_GROUP = {
+    FOLLOWED_BY_COLON_REGEX: 4,
+    PRECEDED_BY_EQUAL_COMPARISON_SIGNS_QUOTES_REQUIRED_REGEX: 2,
+    FOLLOWED_BY_EQUAL_SIGNS_REGEX: 5,
+    FOLLOWED_BY_QUOTES_AND_SEMICOLON_REGEX: 3,
+}
+GOLANG_DENYLIST_REGEX_TO_GROUP = {
+    FOLLOWED_BY_COLON_EQUAL_SIGNS_REGEX: 4,
+    PRECEDED_BY_EQUAL_COMPARISON_SIGNS_QUOTES_REQUIRED_REGEX: 2,
+    FOLLOWED_BY_EQUAL_SIGNS_REGEX: 5,
+    FOLLOWED_BY_QUOTES_AND_SEMICOLON_REGEX: 3,
+}
+COMMON_C_DENYLIST_REGEX_TO_GROUP = {
+    FOLLOWED_BY_EQUAL_SIGNS_OPTIONAL_BRACKETS_OPTIONAL_AT_SIGN_QUOTES_REQUIRED_REGEX: 6,
+}
+C_PLUS_PLUS_REGEX_TO_GROUP = {
+    FOLLOWED_BY_OPTIONAL_ASSIGN_QUOTES_REQUIRED_REGEX: 4,
+    FOLLOWED_BY_EQUAL_SIGNS_QUOTES_REQUIRED_REGEX: 5,
+}
+QUOTES_REQUIRED_DENYLIST_REGEX_TO_GROUP = {
+    FOLLOWED_BY_COLON_QUOTES_REQUIRED_REGEX: 5,
+    PRECEDED_BY_EQUAL_COMPARISON_SIGNS_QUOTES_REQUIRED_REGEX: 2,
+    FOLLOWED_BY_EQUAL_SIGNS_QUOTES_REQUIRED_REGEX: 5,
+    FOLLOWED_BY_QUOTES_AND_SEMICOLON_REGEX: 3,
+    FOLLOWED_BY_ARROW_FUNCTION_SIGN_QUOTES_REQUIRED_REGEX: 4,
+}
 REGEX_BY_FILETYPE = {
     FileType.GO: GOLANG_DENYLIST_REGEX_TO_GROUP,
     FileType.OBJECTIVE_C: COMMON_C_DENYLIST_REGEX_TO_GROUP,
@@ -212,8 +257,6 @@ REGEX_BY_FILETYPE = {
     FileType.INI: CONFIG_DENYLIST_REGEX_TO_GROUP,
     FileType.PROPERTIES: CONFIG_DENYLIST_REGEX_TO_GROUP,
     FileType.TOML: CONFIG_DENYLIST_REGEX_TO_GROUP,
-    # Add the following line to include detection of unquoted sensitive information
-    FileType.UNKNOWN: {DENYLIST_UNQUOTED_REGEX: 1},
 }
 
 
